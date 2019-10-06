@@ -344,6 +344,7 @@ struct Battle_Config
 	int item_drop_adddrop_min,item_drop_adddrop_max; //[Skotlex]
 
 	int prevent_logout;	// Added by RoVeRT
+	int land_protector_behavior;
 	int prevent_logout_trigger;
 
 	int alchemist_summon_reward;	// [Valaris]
@@ -514,6 +515,13 @@ struct Battle_Config
 	int bg_magic_damage_rate;
 	int bg_misc_damage_rate;
 	int bg_flee_penalty;
+	int bg_reward_rates;
+	int bg_idle_announce;
+	int bg_idle_autokick;
+	int bg_reportafk_leaderonly;
+	int bg_queue2team_balanced;
+	int bg_queue_onlytowns;
+	int bg_logincount_check;
 
 	// rAthena
 	int max_third_parameter;

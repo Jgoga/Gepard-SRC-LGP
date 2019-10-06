@@ -2260,7 +2260,7 @@ static int battle_skill_damage(struct block_list *src, struct block_list *target
 int battle_calc_chorusbonus(struct map_session_data *sd) {
 	int members = 0;
 
-	if (!sd || !sd->status.party_id)
+	if (!sd || (!sd->status.party_id && !map_getmapflag(sd->bl.m, MF_BATTLEGROUND)))
 		return 0;
 
 	members = party_foreachsamemap(party_sub_count_class, sd, 0, MAPID_THIRDMASK, MAPID_MINSTRELWANDERER);
@@ -3281,7 +3281,7 @@ struct Damage battle_calc_skill_base_damage(struct Damage wd, struct block_list 
 					ATK_ADDRATE(wd.damage, wd.damage2, sd->bonus.crit_atk_rate);
 				}
 #endif
-				if(sd->status.party_id && (skill=pc_checkskill(sd,TK_POWER)) > 0) {
+				if((sd->status.party_id || map_getmapflag(sd->bl.m, MF_BATTLEGROUND)) && (skill=pc_checkskill(sd,TK_POWER)) > 0) {
 					if( (i = party_foreachsamemap(party_sub_count, sd, 0)) > 1 ) { // exclude the player himself [Inkfish]
 						ATK_ADDRATE(wd.damage, wd.damage2, 2*skill*i);
 						RE_ALLATK_ADDRATE(wd, 2*skill*i);
@@ -5837,10 +5837,19 @@ struct Damage battle_calc_magic_attack(struct block_list *src,struct block_list 
 				ad.damage = tstatus->sp * 2;
 				break;
 			default: {
-				if (sstatus->matk_max > sstatus->matk_min) {
-					MATK_ADD(sstatus->matk_min+rnd()%(sstatus->matk_max-sstatus->matk_min));
-				} else {
-					MATK_ADD(sstatus->matk_min);
+				if (skill_id == NPC_EARTHQUAKE) {
+					if (sstatus->rhw.atk2 > sstatus->rhw.atk) {
+						MATK_ADD(sstatus->rhw.atk + rnd()%(sstatus->rhw.atk2-sstatus->rhw.atk));
+					} else {
+						MATK_ADD(sstatus->rhw.atk);
+					}
+				}
+				else {
+					if (sstatus->matk_max > sstatus->matk_min) {
+						MATK_ADD(sstatus->matk_min+rnd()%(sstatus->matk_max-sstatus->matk_min));
+					} else {
+						MATK_ADD(sstatus->matk_min);
+					}
 				}
 
 				if (nk&NK_SPLASHSPLIT) { // Divide MATK in case of multiple targets skill
@@ -6054,7 +6063,7 @@ struct Damage battle_calc_magic_attack(struct block_list *src,struct block_list 
 						else
 							skillratio += 900 + 500 * skill_lv; // 19 x 19 cell
 
-						if (sd && sd->status.party_id) {
+						if (sd && (sd->status.party_id || map_getmapflag(sd->bl.m, MF_BATTLEGROUND))) {
 							struct map_session_data* psd;
 							int p_sd[MAX_PARTY], c;
 
@@ -7910,7 +7919,9 @@ int battle_check_target( struct block_list *src, struct block_list *target,int f
 		if( flag&(BCT_PARTY|BCT_ENEMY) )
 		{
 			int s_party = status_get_party_id(s_bl);
-			if( s_party && s_party == status_get_party_id(t_bl) && !(mapdata->flag[MF_PVP] && mapdata->flag[MF_PVP_NOPARTY]) && !(mapdata_flag_gvg(mapdata) && mapdata->flag[MF_GVG_NOPARTY]) && (!mapdata->flag[MF_BATTLEGROUND] || sbg_id == tbg_id) )
+			if( s_party && s_party == status_get_party_id(t_bl) && !(mapdata->flag[MF_PVP] && mapdata->flag[MF_PVP_NOPARTY]) && !(mapdata_flag_gvg(mapdata) && mapdata->flag[MF_GVG_NOPARTY]) && !mapdata->flag[MF_BATTLEGROUND] )
+				state |= BCT_PARTY;
+			else if(mapdata->flag[MF_BATTLEGROUND] && sbg_id == tbg_id)
 				state |= BCT_PARTY;
 			else
 				state |= BCT_ENEMY;
@@ -7919,7 +7930,9 @@ int battle_check_target( struct block_list *src, struct block_list *target,int f
 		{
 			int s_guild = status_get_guild_id(s_bl);
 			int t_guild = status_get_guild_id(t_bl);
-			if( !(mapdata->flag[MF_PVP] && mapdata->flag[MF_PVP_NOGUILD]) && s_guild && t_guild && (s_guild == t_guild || (!(flag&BCT_SAMEGUILD) && guild_isallied(s_guild, t_guild))) && (!mapdata->flag[MF_BATTLEGROUND] || sbg_id == tbg_id) )
+			if( !(mapdata->flag[MF_PVP] && mapdata->flag[MF_PVP_NOGUILD]) && s_guild && t_guild && (s_guild == t_guild || (!(flag&BCT_SAMEGUILD) && guild_isallied(s_guild, t_guild))) && !mapdata->flag[MF_BATTLEGROUND] )
+				state |= BCT_GUILD;
+			else if(mapdata->flag[MF_BATTLEGROUND] && sbg_id == tbg_id)
 				state |= BCT_GUILD;
 			else
 				state |= BCT_ENEMY;
@@ -8387,6 +8400,7 @@ static const struct _battle_data {
 	{ "cashshop_show_points",               &battle_config.cashshop_show_points,            0,      0,      1,              },
 	{ "mail_show_status",                   &battle_config.mail_show_status,                0,      0,      2,              },
 	{ "client_limit_unit_lv",               &battle_config.client_limit_unit_lv,            0,      0,      BL_ALL,         },
+	{ "land_protector_behavior",            &battle_config.land_protector_behavior,         0,      0,      1,              },
 // BattleGround Settings
 	{ "bg_update_interval",                 &battle_config.bg_update_interval,              1000,   100,    INT_MAX,        },
 	{ "bg_short_attack_damage_rate",        &battle_config.bg_short_damage_rate,            80,     0,      INT_MAX,        },

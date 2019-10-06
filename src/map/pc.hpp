@@ -255,6 +255,8 @@ struct map_session_data {
 		unsigned int lesseffect : 1;
 		unsigned int vending : 1;
 		unsigned int noks : 3; // [Zeph Kill Steal Protection]
+		unsigned int secure_item : 1; // Security
+		unsigned int restock : 1; // Restock
 		unsigned int changemap : 1;
 		unsigned int callshop : 1; // flag to indicate that a script used callshop; on a shop
 		short pmap; // Previous map on Map Change
@@ -266,6 +268,7 @@ struct map_session_data {
 		unsigned int gmaster_flag : 1;
 		unsigned int prevend : 1;//used to flag wheather you've spent 40sp to open the vending or not.
 		unsigned int warping : 1;//states whether you're in the middle of a warp processing
+		unsigned int spb : 1; // @spb / @partybuff
 		unsigned int permanent_speed : 1; // When 1, speed cannot be changed through status_calc_pc().
 		unsigned int hold_recalc : 1;
 		unsigned int banking : 1; //1 when we using the banking system 0 when closed
@@ -279,6 +282,10 @@ struct map_session_data {
 		bool mail_writing; // Whether the player is currently writing a mail in RODEX or not
 		bool cashshop_open;
 		bool sale_open;
+		unsigned int view_mob_info : 1;
+		unsigned int bg_listen : 1;
+		unsigned int bg_afk : 1; // Moved here to reduce searchs
+		unsigned int only_walk : 1; // [Zephyrus] Block Skills and Item usage to a player
 	} state;
 	struct {
 		unsigned char no_weapon_damage, no_magic_damage, no_misc_damage;
@@ -587,7 +594,7 @@ struct map_session_data {
 	size_t duel_group; // duel vars [LuzZza]
 	size_t duel_invite;
 
-	int killerrid, killedrid, killedgid;
+	int killerrid, killedrid, killedgid, itemusedid;
 
 	int cashPoints, kafraPoints;
 	int rental_timer;
@@ -636,7 +643,11 @@ struct map_session_data {
 	int debug_line;
 	const char* debug_func;
 
+	// Battleground and Queue System
 	unsigned int bg_id;
+	struct battleground_data *bmaster_flag;
+	struct queue_data *qd;
+	unsigned short bg_team;
 
 #ifdef SECURE_NPCTIMEOUT
 	/**
@@ -1278,6 +1289,8 @@ extern int day_timer_tid;
 extern int night_timer_tid;
 TIMER_FUNC(map_day_timer); // by [yor]
 TIMER_FUNC(map_night_timer); // by [yor]
+
+int pc_update_last_action(struct map_session_data *sd, int type, enum idletime_option idle_option);
 
 // Rental System
 void pc_inventory_rentals(struct map_session_data *sd);

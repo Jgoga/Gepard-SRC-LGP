@@ -49,6 +49,7 @@
 #include "script.hpp"
 #include "storage.hpp"
 #include "trade.hpp"
+#include "battleground.hpp"
 
 #define ATCOMMAND_LENGTH 50
 #define ACMD_FUNC(x) static int atcommand_ ## x (const int fd, struct map_session_data* sd, const char* command, const char* message)
@@ -143,6 +144,16 @@ static const char* atcommand_help_string(const char* command)
 
 	// push the result from the method
 	return str;
+}
+
+/*=========================================
+ * Settings
+ *-----------------------------------------*/
+ACMD_FUNC(settings)
+{
+	nullpo_retr(-1, sd);
+	npc_event(sd,"Settings::OnCommand",0);
+	return 0;
 }
 
 
@@ -387,13 +398,13 @@ ACMD_FUNC(send)
  * @author Euphy
  */
 static void warp_get_suggestions(struct map_session_data* sd, const char *name) {
-	// Minimum length for suggestions is 2 characters
+	
 	if( strlen( name ) < 2 ){
 		return;
 	}
 
 	std::vector<const char*> suggestions;
-
+	// build the suggestion string
 	suggestions.reserve( MAX_SUGGESTIONS );
 
 	// check for maps that contain string
@@ -416,8 +427,8 @@ static void warp_get_suggestions(struct map_session_data* sd, const char *name) 
 
 	// if no maps found, search by edit distance
 	if( suggestions.empty() ){
-		// Levenshtein > 4 is bad
 		const int LEVENSHTEIN_MAX = 4;
+		// calculate Levenshtein distance for all maps
 
 		std::unordered_map<int, std::vector<const char*>> maps;
 
@@ -438,7 +449,7 @@ static void warp_get_suggestions(struct map_session_data* sd, const char *name) 
 			}
 
 			std::vector<const char*>& vector = maps[distance];
-
+		// selection sort elements as needed
 			// Do not add more entries than required
 			if( vector.size() == MAX_SUGGESTIONS ){
 				continue;
@@ -446,7 +457,7 @@ static void warp_get_suggestions(struct map_session_data* sd, const char *name) 
 
 			vector.push_back(mapdata->name);
 		}
-
+			// print map name
 		for( int distance = 0; distance <= LEVENSHTEIN_MAX; distance++ ){
 			std::vector<const char*>& vector = maps[distance];
 
@@ -463,7 +474,7 @@ static void warp_get_suggestions(struct map_session_data* sd, const char *name) 
 			}
 		}
 	}
-
+			// swap elements
 	// If no suggestion could be made, do not output anything at all
 	if( suggestions.empty() ){
 		return;
@@ -1869,51 +1880,47 @@ ACMD_FUNC(go)
 		char map[MAP_NAME_LENGTH];
 		int x, y;
 	} data[] = {
-		{ MAP_PRONTERA,    156, 191 }, //  0=Prontera
-		{ MAP_MORROC,      156,  93 }, //  1=Morroc
-		{ MAP_GEFFEN,      119,  59 }, //  2=Geffen
-		{ MAP_PAYON,       162, 233 }, //  3=Payon
-		{ MAP_ALBERTA,     192, 147 }, //  4=Alberta
+		{ MAP_PRONTERA,    155, 179 }, //  0=Prontera
+		{ MAP_MORROC,      158,  86 }, //  1=Morroc
+		{ MAP_GEFFEN,      119,  63 }, //  2=Geffen
+		{ MAP_PAYON,       174,  95 }, //  3=Payon
+		{ MAP_ALBERTA,     187, 134 }, //  4=Alberta
 #ifdef RENEWAL
-		{ MAP_IZLUDE,      128, 146 }, //  5=Izlude (Renewal)
+		{ MAP_IZLUDE,      128, 144 }, //  5=Izlude (Renewal)
 #else
-		{ MAP_IZLUDE,      128, 114 }, //  5=Izlude
+		{ MAP_IZLUDE,      127, 106 }, //  5=Izlude
 #endif
-		{ MAP_ALDEBARAN,   140, 131 }, //  6=Al de Baran
-		{ MAP_LUTIE,       147, 134 }, //  7=Lutie
-		{ MAP_COMODO,      209, 143 }, //  8=Comodo
-		{ MAP_YUNO,        157,  51 }, //  9=Yuno
-		{ MAP_AMATSU,      198,  84 }, // 10=Amatsu
-		{ MAP_GONRYUN,     160, 120 }, // 11=Gonryun
-		{ MAP_UMBALA,       89, 157 }, // 12=Umbala
-		{ MAP_NIFLHEIM,     21, 153 }, // 13=Niflheim
-		{ MAP_LOUYANG,     217,  40 }, // 14=Louyang
+		{ MAP_ALDEBARAN,   140, 110 }, //  6=Al de Baran
+		{ MAP_LUTIE,       148, 126 }, //  7=Lutie
+		{ MAP_COMODO,      202, 135 }, //  8=Comodo
+		{ MAP_YUNO,        157, 161 }, //  9=Yuno
+		{ MAP_AMATSU,      225, 226 }, // 10=Amatsu
+		{ MAP_GONRYUN,     158, 115 }, // 11=Gonryun
+		{ MAP_UMBALA,      143, 153 }, // 12=Umbala
+		{ MAP_NIFLHEIM,     21, 151 }, // 13=Niflheim
+		{ MAP_LOUYANG,     216, 100 }, // 14=Louyang
 #ifdef RENEWAL
-		{ MAP_NOVICE,       18, 26  }, // 15=Training Grounds (Renewal)
+		{ MAP_NOVICE,       18,  24 }, // 15=Training Grounds (Renewal)
 #else
-		{ MAP_NOVICE,       53, 111 }, // 15=Training Grounds
+		{ MAP_NOVICE,       53, 109 }, // 15=Training Grounds
 #endif
-		{ MAP_JAIL,         23,  61 }, // 16=Prison
-		{ MAP_JAWAII,      249, 127 }, // 17=Jawaii
-		{ MAP_AYOTHAYA,    151, 117 }, // 18=Ayothaya
-		{ MAP_EINBROCH,     64, 200 }, // 19=Einbroch
-		{ MAP_LIGHTHALZEN, 158,  92 }, // 20=Lighthalzen
-		{ MAP_EINBECH,      70,  95 }, // 21=Einbech
-		{ MAP_HUGEL,        96, 145 }, // 22=Hugel
-		{ MAP_RACHEL,      130, 110 }, // 23=Rachel
-		{ MAP_VEINS,       216, 123 }, // 24=Veins
-		{ MAP_MOSCOVIA,    223, 184 }, // 25=Moscovia
-		{ MAP_MIDCAMP,     180, 240 }, // 26=Midgard Camp
-		{ MAP_MANUK,       282, 138 }, // 27=Manuk
-		{ MAP_SPLENDIDE,   201, 147 }, // 28=Splendide
-		{ MAP_BRASILIS,    182, 239 }, // 29=Brasilis
-		{ MAP_DICASTES,    198, 187 }, // 30=El Dicastes
-		{ MAP_MORA,         44, 151 }, // 31=Mora
-		{ MAP_DEWATA,      200, 180 }, // 32=Dewata
-		{ MAP_MALANGDO,    140, 114 }, // 33=Malangdo Island
-		{ MAP_MALAYA,      242, 211 }, // 34=Malaya Port
-		{ MAP_ECLAGE,      110,  39 }, // 35=Eclage
-		{ MAP_LASAGNA,     193, 182 }, // 36=Lasagna
+		{ MAP_JAIL,         23,  59 }, // 16=Prison
+		{ MAP_JAWAII,      217, 225 }, // 17=Jawaii
+		{ MAP_AYOTHAYA,    149, 110 }, // 18=Ayothaya
+		{ MAP_EINBROCH,     63, 193 }, // 19=Einbroch
+		{ MAP_LIGHTHALZEN, 158,  89 }, // 20=Lighthalzen
+		{ MAP_EINBECH,      70,  91 }, // 21=Einbech
+		{ MAP_HUGEL,        96, 143 }, // 22=Hugel
+		{ MAP_RACHEL,      129, 106 }, // 23=Rachel
+		{ MAP_VEINS,       200, 115 }, // 24=Veins
+		{ MAP_MOSCOVIA,    223, 190 }, // 25=Moscovia
+		{ MAP_MIDCAMP,     180, 236 }, // 26=Midgard Camp
+		{ MAP_MANUK,       289, 232 }, // 27=Manuk
+		{ MAP_SPLENDIDE,   201, 142},  // 28=Splendide
+		{ MAP_BRASILIS,    195, 211 }, // 29=Brasilis
+		{ MAP_MALLNPC, 	   101, 145 }, // 30=Mall NPC
+		{ MAP_ITEMMALL,     21,  41 }, // 31=Mall Royal Coins
+		{ MAP_GOLDMART,     99, 111 }, // 32=Mall Vending
 	};
 
 	nullpo_retr(-1, sd);
@@ -2021,20 +2028,12 @@ ACMD_FUNC(go)
 		town = 28;
 	} else if (strncmp(map_name, "brasilis", 3) == 0) {
 		town = 29;
-	} else if (strncmp(map_name, "dicastes01", 3) == 0) {
+	} else if (strncmp(map_name, "sl_mall01", 3) == 0) {
 		town = 30;
-	} else if (strcmp(map_name,  "mora") == 0) {
+	} else if (strncmp(map_name, "itemmall", 3) == 0) {
 		town = 31;
-	} else if (strncmp(map_name, "dewata", 3) == 0) {
+	} else if (strncmp(map_name, "gold_mart", 3) == 0) {
 		town = 32;
-	} else if (strncmp(map_name, "malangdo", 5) == 0) {
-		town = 33;
-	} else if (strncmp(map_name, "malaya", 5) == 0) {
-		town = 34;
-	} else if (strncmp(map_name, "eclage", 3) == 0) {
-		town = 35;
-	} else if (strncmp(map_name, "lasagna", 2) == 0) {
-		town = 36;
 	}
 
 	if (town >= 0 && town < ARRAYLENGTH(data))
@@ -3158,6 +3157,7 @@ ACMD_FUNC(doommap)
 	}
 	mapit_free(iter);
 
+
 	clif_displaymessage(fd, msg_txt(sd,62)); // Judgement was made.
 
 	return 0;
@@ -4113,6 +4113,10 @@ ACMD_FUNC(mapinfo) {
 		strcat(atcmd_output, " NoGo |"); //
 	if (map_getmapflag(m_id, MF_NOMEMO))
 		strcat(atcmd_output, "  NoMemo |");
+	if (map_getmapflag(m_id, MF_ALLOW_BG_ITEMS))
+		strcat(atcmd_output, "  Allow_bg_items |");
+	if (map_getmapflag(m_id, MF_ALLOW_WOE_ITEMS))
+		strcat(atcmd_output, "  Allow_woe_items |");
 	clif_displaymessage(fd, atcmd_output);
 
 	sprintf(atcmd_output, msg_txt(sd,1065),  // No Exp Penalty: %s | No Zeny Penalty: %s
@@ -6475,7 +6479,7 @@ ACMD_FUNC(fireworks)
 ACMD_FUNC(clearweather)
 {
 	nullpo_retr(-1, sd);
-
+	// No longer available, keeping here just in case it's back someday. [Ind]
 	//map_setmapflag(sd->bl.m, MF_RAIN, false); // No longer available, keeping here just in case it's back someday. [Ind]
 	map_setmapflag(sd->bl.m, MF_SNOW, false);
 	map_setmapflag(sd->bl.m, MF_SAKURA, false);
@@ -9983,6 +9987,30 @@ ACMD_FUNC(adopt)
 	return -1;
 }
 
+ACMD_FUNC(partybuff)
+{
+	struct party_data* p = NULL;
+	nullpo_retr(-1, sd);
+
+    if( !sd->status.party_id ) {
+    	clif_displaymessage(fd, msg_txt(sd,1505)); // You're not in a party.
+    	return -1;
+    }
+
+	p = party_search(sd->status.party_id);
+
+	if( sd->state.spb ) {
+		sd->state.spb = 0;
+    	clif_displaymessage(fd, msg_txt(sd,1506)); // Displaying party member's buffs disabled.
+	} else {
+		sd->state.spb = 1;
+    	clif_displaymessage(fd, msg_txt(sd,1507)); // Displaying party member's buffs enabled.
+	}
+
+	clif_party_info(p,sd);
+	return 0;
+}
+
 /**
  * Opens the limited sale window.
  * Usage: @limitedsale or client command /limitedsale on supported clients
@@ -9994,6 +10022,301 @@ ACMD_FUNC(limitedsale){
 
 	return 0;
 }
+
+/*=========================================
+ * Item Security System
+ *-----------------------------------------*/
+ACMD_FUNC(security)
+{
+	nullpo_retr(false,sd);
+	if(sd->npc_id || sd->npc_shopid || sd->vender_id || sd->buyer_id || sd->state.trading || sd->state.storage_flag)
+	{
+		return false;
+	}
+
+	npc_event(sd,"SecuritySystem::OnSettings",0);
+	return 0;
+}
+/*[================================================================]
+@securityinfo <password> OR #securityinfo <player> <password>
+  [================================================================]*/
+
+ACMD_FUNC(securityinfo) 
+{
+	char output[CHAT_SIZE_MAX];
+	int value;	
+	memset(output, '\0', sizeof(output));
+
+	value = pc_readaccountreg(sd,add_str("#SECURITYCODE")); 
+	sprintf(output,"The Access security  is: %d",value);
+	clif_displaymessage(fd,output);
+	return 0;
+}
+
+// (^~_~^) Gepard Shield Start
+
+ACMD_FUNC(gepard_block_nick)
+{
+	struct map_session_data* violator_sd;
+	time_t time_server;
+	unsigned int duration;
+	unsigned int violator_account_id = 0;
+	unsigned int violator_unique_id = 0;
+	char reason_str[GEPARD_REASON_LENGTH];
+	char unban_time_str[GEPARD_TIME_STR_LENGTH];
+	char duration_type, violator_name[NAME_LENGTH];
+	const char* command_info = "Wrong input (usage: @gepard_block_nick <duration> <duration_type m/h/d> \"<char name>\" <reason>)";
+
+	nullpo_retr(-1, sd);
+
+	memset(atcmd_player_name, '\0', sizeof(atcmd_player_name));
+
+	if (!*message || sscanf(message, "%u %c \"%23[^\"]\" %99[^\n]", &duration, &duration_type, violator_name, reason_str) < 4)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	time(&time_server);
+
+	switch (duration_type)
+	{
+		case 'm':
+			time_server += (duration * 60);
+		break;
+
+		case 'h':
+			time_server += (duration * 3600);
+		break;
+
+		case 'd':
+			time_server += (duration * 86400);
+		break;
+
+		default:
+			duration = 0;
+		break;
+	}
+
+	if (duration == 0)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	strftime(unban_time_str, sizeof(unban_time_str), "%Y-%m-%d %H:%M:%S", localtime(&time_server)); 
+
+	sprintf(atcmd_output, "Request: block by name - %s", violator_name);
+	clif_displaymessage(fd, atcmd_output);
+
+	violator_sd = map_nick2sd(violator_name, false);
+
+	if (violator_sd != NULL)
+	{
+		violator_account_id = violator_sd->status.account_id;
+		violator_unique_id = session[violator_sd->fd]->gepard_info.unique_id;
+	}
+
+	chrif_gepard_req_block(violator_unique_id, violator_name, violator_account_id, sd->status.name, sd->status.account_id, unban_time_str, reason_str);
+
+	return 0;
+}
+
+// (^~_~^) Gepard Shield End
+
+// (^~_~^) Gepard Shield Start
+
+ACMD_FUNC(gepard_block_account_id)
+{
+	struct map_session_data* violator_sd;
+	time_t time_server;
+	unsigned int duration;
+	unsigned int violator_account_id = 0;
+	unsigned int violator_unique_id = 0;
+	char reason_str[GEPARD_REASON_LENGTH];
+	char duration_type, unban_time_str[GEPARD_TIME_STR_LENGTH];
+	const char* command_info = "Wrong input (usage: @gepard_block_account_id <duration> <duration_type m/h/d> <account ID> <reason>)";
+
+	nullpo_retr(-1, sd);
+
+	memset(atcmd_player_name, '\0', sizeof(atcmd_player_name));
+
+	if (!*message || sscanf(message, "%u %c %u %99[^\n]", &duration, &duration_type, &violator_account_id, reason_str) < 4)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	time(&time_server);
+
+	switch (duration_type)
+	{
+		case 'm':
+			time_server += (duration * 60);
+		break;
+
+		case 'h':
+			time_server += (duration * 3600);
+		break;
+
+		case 'd':
+			time_server += (duration * 86400);
+		break;
+
+		default:
+			duration = 0;
+		break;
+	}
+
+	if (duration == 0)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	strftime(unban_time_str, sizeof(unban_time_str), "%Y-%m-%d %H:%M:%S", localtime(&time_server)); 
+
+	sprintf(atcmd_output, "Request: block by account ID: %u", violator_account_id);
+	clif_displaymessage(fd, atcmd_output);
+
+	violator_sd = map_id2sd(violator_account_id);
+
+	if (violator_sd != NULL)
+	{
+		violator_account_id = violator_sd->status.account_id;
+		violator_unique_id = session[violator_sd->fd]->gepard_info.unique_id;
+	}
+
+	chrif_gepard_req_block(violator_unique_id, atcmd_player_name, violator_account_id, sd->status.name, sd->status.account_id, unban_time_str, reason_str);
+
+	return 0;
+}
+
+ACMD_FUNC(gepard_block_unique_id)
+{
+	time_t time_server;
+	unsigned int duration;
+	unsigned int violator_unique_id = 0;
+	char reason_str[GEPARD_REASON_LENGTH];
+	char duration_type, unban_time_str[GEPARD_TIME_STR_LENGTH];
+	const char* command_info = "Wrong input (usage: @gepard_block_unique_id <duration> <duration_type m/h/d> <unique ID> <reason>)";
+
+	nullpo_retr(-1, sd);
+
+	memset(atcmd_player_name, '\0', sizeof(atcmd_player_name));
+
+	if (!*message || sscanf(message, "%u %c %u %99[^\n]", &duration, &duration_type, &violator_unique_id, reason_str) < 4)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	time(&time_server);
+
+	switch (duration_type)
+	{
+		case 'm':
+			time_server += (duration * 60);
+		break;
+
+		case 'h':
+			time_server += (duration * 3600);
+		break;
+
+		case 'd':
+			time_server += (duration * 86400);
+		break;
+
+		default:
+			duration = 0;
+		break;
+	}
+
+	if (duration == 0)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	strftime(unban_time_str, sizeof(unban_time_str), "%Y-%m-%d %H:%M:%S", localtime(&time_server)); 
+
+	sprintf(atcmd_output, "Request: block by unqiue ID: %u", violator_unique_id);
+	clif_displaymessage(fd, atcmd_output);
+
+	chrif_gepard_req_block(violator_unique_id, NULL, 0, sd->status.name, sd->status.account_id, unban_time_str, reason_str);
+
+	return 0;
+}
+
+ACMD_FUNC(gepard_unblock_nick)
+{
+	char violator_name[NAME_LENGTH];
+	const char* command_info = "Wrong input (usage: @gepard_unblock_nick <char name>)";
+
+	nullpo_retr(-1, sd);
+
+	if (!*message || sscanf(message, "\"%23[^\"]\"[^\n]", violator_name) < 1)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	sprintf(atcmd_output, "Request: unblock by name - %s", violator_name);
+
+	clif_displaymessage(fd, atcmd_output);
+
+	chrif_gepard_req_unblock(0, violator_name, 0, sd->status.account_id);
+
+	return 0;
+}
+
+ACMD_FUNC(gepard_unblock_account_id)
+{
+	int violator_aid;
+	const char* command_info = "Wrong input (usage: @gepard_unblock_account_id <account ID>)";
+
+	nullpo_retr(-1, sd);
+
+	memset(atcmd_player_name, '\0', sizeof(atcmd_player_name));
+
+	if (!*message || sscanf(message, "%d", &violator_aid) < 1)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	sprintf(atcmd_output, "Request: unblock by account id - %d", violator_aid);
+
+	clif_displaymessage(fd, atcmd_output);
+
+	chrif_gepard_req_unblock(0, NULL, violator_aid, sd->status.account_id);
+
+	return 0;
+}
+
+ACMD_FUNC(gepard_unblock_unique_id)
+{
+	unsigned int violator_unique_id;
+	const char* command_info = "Wrong input (usage: @gepard_unblock_unique_id <unique ID>)";
+
+	nullpo_retr(-1, sd);
+
+	if (!*message || sscanf(message, "%u", &violator_unique_id) < 1)
+	{
+		clif_displaymessage(fd, command_info);
+		return -1;
+	}
+
+	sprintf(atcmd_output, "Request: unblock by unique id - %u", violator_unique_id);
+
+	clif_displaymessage(fd, atcmd_output);
+
+	chrif_gepard_req_unblock(violator_unique_id, NULL, 0, sd->status.account_id);
+
+	return 0;
+}
+
+// (^~_~^) Gepard Shield End
 
 #include "../custom/atcommand.inc"
 
@@ -10011,8 +10334,29 @@ void atcommand_basecommands(void) {
 	 * TODO: List all commands that causing crash
 	 **/
 	AtCommandInfo atcommand_base[] = {
+
+// (^~_~^) Gepard Shield Start
+
+		ACMD_DEF(gepard_block_nick),
+		ACMD_DEF(gepard_block_account_id),
+		ACMD_DEF(gepard_block_unique_id),
+		ACMD_DEF(gepard_unblock_nick),
+		ACMD_DEF(gepard_unblock_account_id),
+		ACMD_DEF(gepard_unblock_unique_id),
+
+// (^~_~^) Gepard Shield End
+
 #include "../custom/atcommand_def.inc"
+		
+		ACMD_DEF(settings),
+
+		//Security
+		ACMD_DEF(security),
+		ACMD_DEF(securityinfo),
+		
 		ACMD_DEF2R("warp", mapmove, ATCMD_NOCONSOLE),
+		ACMD_DEF(partybuff),
+		ACMD_DEF2("spb", partybuff),
 		ACMD_DEF(where),
 		ACMD_DEF(jumpto),
 		ACMD_DEF(jump),

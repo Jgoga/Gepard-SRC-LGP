@@ -35,6 +35,7 @@
 #include "pc_groups.hpp"
 #include "pet.hpp"
 #include "script.hpp"
+#include "party.hpp"
 
 // Regen related flags.
 enum e_regen {
@@ -255,7 +256,7 @@ void initChangeTables(void)
 	add_sc( MG_FROSTDIVER		, SC_FREEZE		);
 	add_sc( MG_STONECURSE		, SC_STONE		);
 	add_sc( AL_RUWACH		, SC_RUWACH		);
-	add_sc( AL_PNEUMA		, SC_PNEUMA		);
+	set_sc( AL_PNEUMA		, SC_PNEUMA			, SI_PNEUMA			, SCB_NONE	);
 	set_sc( AL_INCAGI		, SC_INCREASEAGI	, EFST_INC_AGI, SCB_AGI|SCB_SPEED );
 	set_sc( AL_DECAGI		, SC_DECREASEAGI	, EFST_DEC_AGI, SCB_AGI|SCB_SPEED );
 	set_sc( AL_CRUCIS		, SC_SIGNUMCRUCIS	, EFST_CRUCIS, SCB_DEF );
@@ -392,6 +393,7 @@ void initChangeTables(void)
 #else
 		SCB_NONE );
 #endif
+	set_sc( GD_EMERGENCYCALL	, SC_EMERGENCYCALL		, SI_EMERGENCYCALL	, SCB_NONE );
 	set_sc( BD_ROKISWEIL		, SC_ROKISWEIL	, EFST_ROKISWEIL	, SCB_NONE );
 	set_sc( BD_INTOABYSS		, SC_INTOABYSS	, EFST_INTOABYSS	, SCB_NONE );
 	set_sc( BD_SIEGFRIED		, SC_SIEGFRIED		, EFST_SIEGFRIED	, SCB_ALL );
@@ -2804,9 +2806,7 @@ int status_calc_mob_(struct mob_data* md, enum e_status_calc_opt opt)
 		struct map_data *mapdata = map_getmapdata(md->bl.m);
 
 		gc=guild_mapname2gc(mapdata->name);
-		if (!gc)
-			ShowError("status_calc_mob: No castle set at map %s\n", mapdata->name);
-		else if(gc->castle_id < 24 || md->mob_id == MOBID_EMPERIUM) {
+		if(gc && (gc->castle_id < 24 || md->mob_id == MOBID_EMPERIUM)) {
 #ifdef RENEWAL
 			status->max_hp += 50 * (gc->defense / 5);
 #else
@@ -8524,12 +8524,6 @@ int status_change_start(struct block_list* src, struct block_list* bl,enum sc_ty
 	undead_flag = battle_check_undead(status->race,status->def_ele);
 	// Check for immunities / sc fails
 	switch (type) {
-	case SC_DECREASEAGI:
-	case SC_QUAGMIRE:
-	case SC_DONTFORGETME:
-		if(sc->data[SC_SPEEDUP1])
-			return 0;
-		break;
 	case SC_ANGRIFFS_MODUS:
 	case SC_GOLDENE_FERSE:
 		if ((type==SC_GOLDENE_FERSE && sc->data[SC_ANGRIFFS_MODUS])
@@ -11746,6 +11740,15 @@ int status_change_start(struct block_list* src, struct block_list* bl,enum sc_ty
 	if( opt_flag&2 && sd && sd->touching_id )
 		npc_touchnext_areanpc(sd,false); // Run OnTouch_ on next char in range
 
+	if( sd && sd->status.party_id && (
+		type == SC_BLESSING || type == SC_INCREASEAGI || type == SC_CP_WEAPON || type == SC_CP_SHIELD ||
+		type == SC_CP_ARMOR || type == SC_CP_HELM || type == SC_SPIRIT || type == SC_DEVOTION )
+	)
+	{
+		struct party_data *p = party_search(sd->status.party_id);
+		clif_party_info(p, NULL);
+	}
+
 	return 1;
 }
 
@@ -11790,6 +11793,7 @@ int status_change_clear(struct block_list* bl, int type)
 			case SC_ELEMENTALCHANGE: // Only when its Holy or Dark that it doesn't dispell on death
 				if( sc->data[i]->val2 != ELE_HOLY && sc->data[i]->val2 != ELE_DARK )
 					break;
+			case SC_EMERGENCYCALL:
 			case SC_WEIGHT50:
 			case SC_WEIGHT90:
 			case SC_EDP:
@@ -11815,6 +11819,7 @@ int status_change_clear(struct block_list* bl, int type)
 			case SC_HELLPOWER:
 			case SC_JEXPBOOST:
 			case SC_AUTOTRADE:
+/*
 			case SC_WHISTLE:
 			case SC_ASSNCROS:
 			case SC_POEMBRAGI:
@@ -11823,6 +11828,7 @@ int status_change_clear(struct block_list* bl, int type)
 			case SC_DONTFORGETME:
 			case SC_FORTUNE:
 			case SC_SERVICE4U:
+*/
 			case SC_FOOD_STR_CASH:
 			case SC_FOOD_AGI_CASH:
 			case SC_FOOD_VIT_CASH:
@@ -12685,6 +12691,12 @@ int status_change_end_(struct block_list* bl, enum sc_type type, int tid, const 
 		if (vd && !vd->cloth_color && sce->val4)
 			clif_changelook(bl,LOOK_CLOTHES_COLOR,sce->val4);
 		calc_flag = static_cast<scb_flag>(calc_flag&~SCB_DYE);
+
+		// [Vykimo] Put palette to players if any
+		struct battleground_data *bg;
+		if (sd && sd->bg_id && (bg = bg_team_search(sd->bg_id)) != NULL && bg->palette) {
+			clif_changelook(&sd->bl, LOOK_CLOTHES_COLOR, bg->palette);
+		}
 	}
 
 	/*if (calc_flag&SCB_BODY)// Might be needed in the future. [Rytech]
@@ -12708,6 +12720,19 @@ int status_change_end_(struct block_list* bl, enum sc_type type, int tid, const 
 			clif_changelook(bl,LOOK_SHIELD,sd->vd.shield);
 			clif_changelook(bl,LOOK_CLOTHES_COLOR,cap_value(sd->status.clothes_color,0,battle_config.max_cloth_color));
 			clif_changelook(bl,LOOK_BODY2,cap_value(sd->status.body,0,battle_config.max_body_style));
+
+			// [Vykimo] Put palette to players if any
+			struct battleground_data *bg;
+			if (sd && sd->bg_id && (bg = bg_team_search(sd->bg_id)) != NULL && bg->palette) {
+				clif_changelook(&sd->bl, LOOK_CLOTHES_COLOR, bg->palette);
+			}
+		}
+		else if (opt_flag & 2) {
+			// [Vykimo] Put palette to players if any
+			struct battleground_data *bg;
+			if (sd && sd->bg_id && (bg = bg_team_search(sd->bg_id)) != NULL && bg->palette) {
+				clif_changelook(&sd->bl, LOOK_CLOTHES_COLOR, bg->palette);
+			}
 		}
 	}
 	if (calc_flag) {
@@ -12727,6 +12752,15 @@ int status_change_end_(struct block_list* bl, enum sc_type type, int tid, const 
 
 	if(opt_flag&2 && sd && map_getcell(bl->m,bl->x,bl->y,CELL_CHKNPC))
 		npc_touch_areanpc(sd,bl->m,bl->x,bl->y); // Trigger on-touch event.
+
+	if( sd && sd->status.party_id && (
+		type == SC_BLESSING || type == SC_INCREASEAGI || type == SC_CP_WEAPON || type == SC_CP_SHIELD ||
+		type == SC_CP_ARMOR || type == SC_CP_HELM || type == SC_SPIRIT || type == SC_DEVOTION )
+	)
+	{
+		struct party_data *p = party_search(sd->status.party_id);
+		clif_party_info(p, NULL);
+	}
 
 	ers_free(sc_data_ers, sce);
 	return 1;

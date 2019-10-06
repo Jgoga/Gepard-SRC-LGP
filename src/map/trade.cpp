@@ -37,8 +37,18 @@ void trade_traderequest(struct map_session_data *sd, struct map_session_data *ta
 		return; //Can't trade in notrade mapflag maps.
 	}
 
+	if( sd->state.secure_item ) {
+		clif_displaymessage(sd->fd, msg_txt(sd,1516));
+		return;
+	}
+
 	if (target_sd == NULL || sd == target_sd) {
 		clif_tradestart(sd, 1); // character does not exist
+		return;
+	}
+
+	if( target_sd->state.secure_item ) {
+		clif_displaymessage(sd->fd, msg_txt(sd,1517));
 		return;
 	}
 

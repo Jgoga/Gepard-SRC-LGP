@@ -44,7 +44,7 @@ void map_msg_reload(void);
 #define LOOTITEM_SIZE 10
 #define MAX_MOBSKILL 50		//Max 128, see mob skill_idx type if need this higher
 #define MAX_MOB_LIST_PER_MAP 128
-#define MAX_EVENTQUEUE 2
+#define MAX_EVENTQUEUE 10
 #define MAX_EVENTTIMER 32
 #define NATURAL_HEAL_INTERVAL 500
 #define MIN_FLOORITEM 2
@@ -410,7 +410,8 @@ enum _sp {
 	SP_MDEF2,SP_HIT,SP_FLEE1,SP_FLEE2,SP_CRITICAL,SP_ASPD,SP_36,SP_JOBLEVEL,	// 48-55
 	SP_UPPER,SP_PARTNER,SP_CART,SP_FAME,SP_UNBREAKABLE,	//56-60
 	SP_CARTINFO=99,	// 99
-
+	
+	SP_ITEMUSEDID=117,
 	SP_KILLEDGID=118,
 	SP_BASEJOB=119,	// 100+19 - celest
 	SP_BASECLASS=120,	//Hmm.. why 100+19? I just use the next one... [Skotlex]
@@ -525,7 +526,7 @@ enum e_mapflag : int16 {
 	MF_FOG,
 	MF_SAKURA,
 	MF_LEAVES,
-	//MF_RAIN,	//20 - No longer available, keeping here just in case it's back someday. [Ind]
+	// used by map_setcell()
 	// 21 free
 	MF_NOGO = 22,
 	MF_CLOUDS,
@@ -574,6 +575,9 @@ enum e_mapflag : int16 {
 	MF_NOEXP,
 	MF_PRIVATEAIRSHIP_SOURCE,
 	MF_PRIVATEAIRSHIP_DESTINATION,
+	MF_NOEMERGENCYCALL,
+	MF_ALLOW_BG_ITEMS,
+	MF_ALLOW_WOE_ITEMS,
 	MF_MAX
 };
 
@@ -730,7 +734,6 @@ struct map_data {
 	struct npc_data *npc[MAX_NPC_PER_MAP];
 	struct spawn_data *moblist[MAX_MOB_LIST_PER_MAP]; // [Wizputer]
 	int mob_delete_timer;	// Timer ID for map_removemobs_timer [Skotlex]
-
 	// Instance Variables
 	unsigned short instance_id;
 	int instance_src_map;
@@ -771,6 +774,7 @@ extern int night_flag; // 0=day, 1=night [Yor]
 extern int enable_spy; //Determines if @spy commands are active.
 
 // Agit Flags
+extern bool bg_flag;
 extern bool agit_flag;
 extern bool agit2_flag;
 extern bool agit3_flag;
@@ -883,6 +887,26 @@ inline bool mapdata_flag_gvg2_no_te(struct map_data *mapdata) {
 	return false;
 }
 
+inline bool mapdata_gvg_items(struct map_data *mapdata) {
+	if (mapdata == nullptr)
+		return false;
+
+	if (mapdata->flag[MF_GVG] || ((agit_flag || agit2_flag || agit3_flag) && mapdata->flag[MF_GVG_CASTLE]) || mapdata->flag[MF_ALLOW_WOE_ITEMS])
+		return true;
+
+	return false;
+}
+
+inline bool mapdata_bg_items(struct map_data *mapdata) {
+	if (mapdata == nullptr)
+		return false;
+
+	if (mapdata->flag[MF_BATTLEGROUND] || mapdata->flag[MF_ALLOW_BG_ITEMS])
+		return true;
+
+	return false;
+}
+
 /// Backwards compatibility
 inline bool map_flag_vs(int16 m) {
 	if (m < 0)
@@ -945,6 +969,24 @@ inline bool map_flag_gvg2_no_te(int16 m) {
 	struct map_data *mapdata = &map[m];
 
 	return mapdata_flag_gvg2_no_te(mapdata);
+}
+
+inline bool map_gvg_items(int16 m) {
+	if (m < 0)
+		return false;
+
+	struct map_data *mapdata = &map[m];
+
+	return mapdata_gvg_items(mapdata);
+}
+
+inline bool map_bg_items(int16 m) {
+	if (m < 0)
+		return false;
+
+	struct map_data *mapdata = &map[m];
+
+	return mapdata_bg_items(mapdata);
 }
 
 extern char motd_txt[];
@@ -1087,6 +1129,10 @@ bool                    mapit_exists(struct s_mapiterator* mapit);
 #define mapit_geteachpc()   mapit_alloc(MAPIT_NORMAL,BL_PC)
 #define mapit_geteachmob()  mapit_alloc(MAPIT_NORMAL,BL_MOB)
 #define mapit_geteachnpc()  mapit_alloc(MAPIT_NORMAL,BL_NPC)
+#define mapit_geteachpet()  mapit_alloc(MAPIT_NORMAL,BL_PET)
+#define mapit_geteachhom()  mapit_alloc(MAPIT_NORMAL,BL_HOM)
+#define mapit_geteachmer()  mapit_alloc(MAPIT_NORMAL,BL_MER)
+#define mapit_geteachelem()  mapit_alloc(MAPIT_NORMAL,BL_ELEM)
 #define mapit_geteachiddb() mapit_alloc(MAPIT_NORMAL,BL_ALL)
 
 int map_check_dir(int s_dir,int t_dir);

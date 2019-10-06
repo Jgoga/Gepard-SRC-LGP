@@ -243,6 +243,16 @@ enum e_item_ammo
 
 enum e_random_item_group {
 	IG_BLUEBOX = 1,
+	IG_GP_14,
+	IG_GP_18,
+	IG_PP,
+	IG_ROYALBOX,
+	IG_Pack_Acolyte,
+	IG_Pack_Merchant,
+	IG_Pack_Mage,
+	IG_Pack_Thief,
+	IG_Pack_Swordman,
+	IG_Pack_Archer,
 	IG_VIOLETBOX,
 	IG_CARDALBUM,
 	IG_GIFTBOX,

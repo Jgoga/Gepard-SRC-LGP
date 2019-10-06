@@ -52,6 +52,11 @@
 #define MAP_ECLAGE_IN "ecl_in01"
 #define MAP_LASAGNA "lasagna"
 
+//ragnaROYAL
+#define MAP_ITEMMALL "itemmall"
+#define MAP_MALLNPC "sl_mall01"
+#define MAP_GOLDMART "gold_mart"
+
 const char* mapindex_getmapname(const char* string, char* output);
 const char* mapindex_getmapname_ext(const char* string, char* output);
 

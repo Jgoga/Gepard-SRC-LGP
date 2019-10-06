@@ -172,15 +172,14 @@ int storage_storageopen(struct map_session_data *sd)
  * @param b : item 2
  * @return 1:same, 0:are different
  */
-int compare_item(struct item *a, struct item *b)
+int compare_item(struct item *a, struct item *b, short flag)
 {
 	if( a->nameid == b->nameid &&
 		a->identify == b->identify &&
 		a->refine == b->refine &&
 		a->attribute == b->attribute &&
-		a->expire_time == b->expire_time &&
-		a->bound == b->bound &&
-		a->unique_id == b->unique_id
+		(flag&1 || (a->expire_time == b->expire_time && a->bound == b->bound 
+					&& a->unique_id == b->unique_id))
 		)
 	{
 		int i;
@@ -276,7 +275,7 @@ static int storage_additem(struct map_session_data* sd, struct s_storage *stor, 
 
 	if( itemdb_isstackable2(data) ) { // Stackable
 		for( i = 0; i < stor->max_amount; i++ ) {
-			if( compare_item(&stor->u.items_storage[i], it) ) { // existing items found, stack them
+			if( compare_item(&stor->u.items_storage[i], it, 0) ) { // existing items found, stack them
 				if( amount > MAX_AMOUNT - stor->u.items_storage[i].amount || ( data->stack.storage && amount > data->stack.amount - stor->u.items_storage[i].amount ) )
 					return 2;
 
@@ -304,6 +303,26 @@ static int storage_additem(struct map_session_data* sd, struct s_storage *stor, 
 	stor->dirty = true;
 	clif_storageitemadded(sd,&stor->u.items_storage[i],i,amount);
 	clif_updatestorageamount(sd, stor->amount, stor->max_amount);
+
+	return 0;
+}
+
+/*==========================================
+ * Add an item to the storage
+ *------------------------------------------*/
+int storage_additem2(struct map_session_data *sd, struct item* item_data, int amount)
+{
+	nullpo_ret(sd);
+	nullpo_ret(item_data);
+
+	if( sd->storage.amount > sd->storage.max_amount )
+		return 0;
+	if( item_data->nameid <= 0 || amount <= 0 )
+		return 0;
+	if( amount > MAX_AMOUNT )
+		return 0;
+	if( storage_additem(sd,&sd->storage,item_data,amount) == 0 )
+		return 1;
 
 	return 0;
 }
@@ -439,6 +458,12 @@ void storage_storageaddfromcart(struct map_session_data *sd, struct s_storage *s
  */
 void storage_storagegettocart(struct map_session_data* sd, struct s_storage *stor, int index, int amount)
 {
+	if( sd->state.secure_item )
+	{
+		clif_displaymessage(sd->fd, msg_txt(sd,1515));
+		return;
+	}
+	
 	unsigned char flag = 0;
 	enum e_storage_add result;
 
@@ -593,8 +618,11 @@ char storage_guild_storageopen(struct map_session_data* sd)
 
 #if PACKETVER >= 20140205
 	int pos;
+	struct guild *g;
 
-	if ((pos = guild_getposition(sd)) < 0 || !(sd->guild->position[pos].mode&GUILD_PERM_STORAGE))
+	nullpo_retr(-1, g = sd->guild);
+
+	if ((pos = guild_getposition(g,sd)) < 0 || !(sd->guild->position[pos].mode&GUILD_PERM_STORAGE))
 		return GSTORAGE_NO_PERMISSION; // Guild member doesn't have permission
 #endif
 
@@ -662,9 +690,15 @@ bool storage_guild_additem(struct map_session_data* sd, struct s_storage* stor, 
 		return false;
 	}
 
+	if( sd->state.secure_item )
+	{
+		clif_displaymessage(sd->fd, msg_txt(sd,1514));
+		return false;
+	}
+	
 	if(itemdb_isstackable2(id)) { //Stackable
 		for(i = 0; i < stor->max_amount; i++) {
-			if(compare_item(&stor->u.items_guild[i], item_data)) {
+			if(compare_item(&stor->u.items_guild[i], item_data, 0)) {
 				if( amount > MAX_AMOUNT - stor->u.items_guild[i].amount || ( id->stack.guildstorage && amount > id->stack.amount - stor->u.items_guild[i].amount ) )
 					return false;
 
@@ -712,7 +746,7 @@ bool storage_guild_additem2(struct s_storage* stor, struct item* item, int amoun
 
 	if (itemdb_isstackable2(id)) { // Stackable
 		for (i = 0; i < stor->max_amount; i++) {
-			if (compare_item(&stor->u.items_guild[i], item)) {
+			if (compare_item(&stor->u.items_guild[i], item, 0)) {
 				// Set the amount, make it fit with max amount
 				amount = min(amount, ((id->stack.guildstorage) ? id->stack.amount : MAX_AMOUNT) - stor->u.items_guild[i].amount);
 				if (amount != item->amount)

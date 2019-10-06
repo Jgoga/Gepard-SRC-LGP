@@ -188,6 +188,35 @@ int pc_get_group_level(struct map_session_data *sd) {
 	return sd->group_level;
 }
 
+/***********************************************************
+* Update Idle PC Timer
+* Type
+* 0 = Send By Server
+* 1 = KeyBoard Action
+* 2 = Mouse Click
+* 3 = Both Hands
+***********************************************************/
+int pc_update_last_action(struct map_session_data *sd, int type, enum idletime_option idle_option)
+{
+	struct battleground_data *bg;
+	unsigned int tick = gettick();
+
+	if( !(battle_config.idletime_option&idle_option) )
+		return 1;
+
+	sd->idletime = last_tick;
+ 
+	if( sd->bg_id && sd->state.bg_afk && (bg = bg_team_search(sd->bg_id)) != NULL && bg->g )
+	{ // Battleground AFK announce
+		char output[128];
+		sprintf(output, "%s : %s is no longer away...", bg->g->name, sd->status.name);
+		clif_bg_message(bg, bg->bg_id, bg->g->name, output, strlen(output) + 1);
+		sd->state.bg_afk = 0;
+	}
+
+	return 1;
+}
+
 static TIMER_FUNC(pc_invincible_timer){
 	struct map_session_data *sd;
 
@@ -1419,6 +1448,11 @@ void pc_reg_received(struct map_session_data *sd)
 	// Cooking Exp
 	sd->cook_mastery = pc_readglobalreg(sd, add_str(COOKMASTERY_VAR));
 
+	// LGP
+	clif_gepard_send_lgp_settings(sd);
+
+	sd->bg_team = pc_readglobalreg(sd,add_str("Bat_Team"));
+
 	if( (sd->class_&MAPID_BASEMASK) == MAPID_TAEKWON )
 	{ // Better check for class rather than skill to prevent "skill resets" from unsetting this
 		sd->mission_mobid = pc_readglobalreg(sd, add_str(TKMISSIONID_VAR));
@@ -1476,6 +1510,7 @@ void pc_reg_received(struct map_session_data *sd)
 		return;
 	sd->state.active = 1;
 	sd->state.pc_loaded = false; // Ensure inventory data and status data is loaded before we calculate player stats
+	sd->state.bg_listen = 1;
 
 	intif_storage_request(sd,TABLE_STORAGE, 0, STOR_MODE_ALL); // Request storage data
 	intif_storage_request(sd,TABLE_CART, 0, STOR_MODE_ALL); // Request cart data
@@ -1514,6 +1549,14 @@ void pc_reg_received(struct map_session_data *sd)
 #endif
 	intif_Mail_requestinbox(sd->status.char_id, 0, MAIL_INBOX_NORMAL); // MAIL SYSTEM - Request Mail Inbox
 	intif_request_questlog(sd);
+	
+	// Security
+	if( pc_readaccountreg(sd, add_str("#SECURITYCODE")) > 0 )	{
+		clif_displaymessage(sd->fd, msg_txt(sd,1512));
+		sd->state.secure_item = 1;
+	}
+	else
+		clif_displaymessage(sd->fd, msg_txt(sd,1511));
 
 	if (battle_config.feature_achievement) {
 		sd->achievement_data.total_score = 0;
@@ -4579,10 +4622,41 @@ int pc_getcash(struct map_session_data *sd, int cash, int points, e_log_pick_typ
  **/
 short pc_search_inventory(struct map_session_data *sd, unsigned short nameid) {
 	short i;
+	int char_id;
 	nullpo_retr(-1, sd);
 
-	ARR_FIND( 0, MAX_INVENTORY, i, sd->inventory.u.items_inventory[i].nameid == nameid && (sd->inventory.u.items_inventory[i].amount > 0 || nameid == 0) );
-	return ( i < MAX_INVENTORY ) ? i : -1;
+	if( nameid )
+	{
+		if( map_bg_items(sd->bl.m) && battle_config.bg_reserved_char_id )
+		{ // Battleground Items
+			ARR_FIND( 0, MAX_INVENTORY, i, sd->inventory.u.items_inventory[i].nameid == nameid && sd->inventory.u.items_inventory[i].amount > 0 && sd->inventory.u.items_inventory[i].card[0] == CARD0_CREATE && MakeDWord(sd->inventory.u.items_inventory[i].card[2],sd->inventory.u.items_inventory[i].card[3]) == battle_config.bg_reserved_char_id );
+			if( i < MAX_INVENTORY ) return i;
+}
+		else if( map_gvg_items(sd->bl.m) && battle_config.woe_reserved_char_id )
+		{ // WoE Items
+			ARR_FIND( 0, MAX_INVENTORY, i, sd->inventory.u.items_inventory[i].nameid == nameid && sd->inventory.u.items_inventory[i].amount > 0 && sd->inventory.u.items_inventory[i].card[0] == CARD0_CREATE && MakeDWord(sd->inventory.u.items_inventory[i].card[2],sd->inventory.u.items_inventory[i].card[3]) == battle_config.woe_reserved_char_id );
+			if( i < MAX_INVENTORY ) return i;
+		}
+	}
+
+	for( i = 0; i < MAX_INVENTORY; i++ )
+	{
+		if( sd->inventory.u.items_inventory[i].nameid != nameid )
+			continue;
+		if( nameid && sd->inventory.u.items_inventory[i].amount < 1 )
+			continue;
+		if( nameid && sd->inventory.u.items_inventory[i].card[0] == CARD0_CREATE && (char_id = MakeDWord(sd->inventory.u.items_inventory[i].card[2],sd->inventory.u.items_inventory[i].card[3])) > 0 )
+		{
+			if( !map_bg_items(sd->bl.m) && battle_config.bg_reserved_char_id && battle_config.bg_reserved_char_id == char_id )
+				continue;
+			if( !map_gvg_items(sd->bl.m) && battle_config.woe_reserved_char_id && battle_config.woe_reserved_char_id == char_id )
+				continue;
+		}
+
+		return i;
+	}
+
+	return -1;
 }
 
 /** Attempt to add a new item to player inventory
@@ -4705,9 +4779,11 @@ char pc_additem(struct map_session_data *sd,struct item *item,int amount,e_log_p
  *------------------------------------------*/
 char pc_delitem(struct map_session_data *sd,int n,int amount,int type, short reason, e_log_pick_type log_type)
 {
+	int item_id = 0;
+
 	nullpo_retr(1, sd);
 
-	if(n < 0 || sd->inventory.u.items_inventory[n].nameid == 0 || amount <= 0 || sd->inventory.u.items_inventory[n].amount<amount || sd->inventory_data[n] == NULL)
+	if(n < 0 || (item_id = sd->inventory.u.items_inventory[n].nameid) == 0 || amount <= 0 || sd->inventory.u.items_inventory[n].amount<amount || sd->inventory_data[n] == NULL)
 		return 1;
 
 	log_pick_pc(sd, log_type, -amount, &sd->inventory.u.items_inventory[n]);
@@ -4724,7 +4800,11 @@ char pc_delitem(struct map_session_data *sd,int n,int amount,int type, short rea
 		clif_delitem(sd,n,amount,reason);
 	if(!(type&2))
 		clif_updatestatus(sd,SP_WEIGHT);
-
+ 
+	if(log_type == LOG_TYPE_CONSUME) {
+		pc_setparam(sd, SP_ITEMUSEDID, item_id);
+		npc_script_event(sd, NPCE_ITEMUSED);
+	}
 	return 0;
 }
 
@@ -4759,6 +4839,13 @@ bool pc_dropitem(struct map_session_data *sd,int n,int amount)
 		return false; //Can't drop items in nodrop mapflag maps.
 	}
 
+	//Security
+	if(sd->state.secure_item)
+	{
+		clif_displaymessage(sd->fd, msg_txt(sd,1510));
+		return false;
+	}
+	
 	if( !pc_candrop(sd,&sd->inventory.u.items_inventory[n]) )
 	{
 		clif_displaymessage (sd->fd, msg_txt(sd,263));
@@ -5029,7 +5116,7 @@ bool pc_isUseitem(struct map_session_data *sd,int n)
 int pc_useitem(struct map_session_data *sd,int n)
 {
 	unsigned int tick = gettick();
-	int amount;
+	int amount,char_id;
 	unsigned short nameid;
 	struct script_code *script;
 	struct item item;
@@ -5056,12 +5143,24 @@ int pc_useitem(struct map_session_data *sd,int n)
 	if (item.nameid == 0 || item.amount <= 0)
 		return 0;
 
+	if( sd->state.only_walk )
+		return 0;
+
 	if( !pc_isUseitem(sd,n) )
 		return 0;
 
 	// Store information for later use before it is lost (via pc_delitem) [Paradox924X]
 	nameid = id->nameid;
 
+	if( item.card[0] == CARD0_CREATE )
+	{ // Do not allow use BG - Ancient Items on invalid maps
+		char_id = MakeDWord(item.card[2],item.card[3]);
+		if( battle_config.bg_reserved_char_id && char_id == battle_config.bg_reserved_char_id && !map_bg_items(sd->bl.m) )
+			return 0;
+		if( battle_config.woe_reserved_char_id && char_id == battle_config.woe_reserved_char_id && !map_gvg_items(sd->bl.m) )
+			return 0;
+	}
+	
 	if (nameid != ITEMID_NAUTHIZ && sd->sc.opt1 > 0 && sd->sc.opt1 != OPT1_STONEWAIT && sd->sc.opt1 != OPT1_BURNING)
 		return 0;
 
@@ -5112,9 +5211,12 @@ int pc_useitem(struct map_session_data *sd,int n)
 		else
 			clif_useitemack(sd, n, 0, false);
 	}
-	if (item.card[0]==CARD0_CREATE && pc_famerank(MakeDWord(item.card[2],item.card[3]), MAPID_ALCHEMIST))
+	if( item.card[0] == CARD0_CREATE && char_id && (char_id == battle_config.bg_reserved_char_id || char_id == battle_config.woe_reserved_char_id || pc_famerank(MakeDWord(item.card[2],item.card[3]), MAPID_ALCHEMIST)) )
+	{
 	    potion_flag = 2; // Famous player's potions have 50% more efficiency
-
+		 if (sd->sc.data[SC_SPIRIT] && sd->sc.data[SC_SPIRIT]->val2 == SL_ROGUE)
+			 potion_flag = 3; //Even more effective potions.
+	}
 	//Update item use time.
 	sd->canuseitem_tick = tick + battle_config.item_use_interval;
 	if( itemdb_group_item_exists(IG_CASH_FOOD, nameid) )
@@ -5145,6 +5247,13 @@ unsigned char pc_cart_additem(struct map_session_data *sd,struct item *item,int 
 		return 1;
 	data = itemdb_search(item->nameid);
 
+	//Security
+	if(sd->state.secure_item)
+	{
+		clif_displaymessage(sd->fd, msg_txt(sd,1513));
+		return 1;
+	}
+	
 	if( data->stack.cart && amount > data->stack.amount )
 	{// item stack limitation
 		return 1;
@@ -5491,28 +5600,30 @@ enum e_setpos pc_setpos(struct map_session_data* sd, unsigned short mapindex, in
 	sd->state.warping = 1;
 	sd->state.workinprogress = WIP_DISABLE_NONE;
 
+	sd->ud.state.blockedskill = 0;
+	
 	if( sd->state.changemap ) { // Misc map-changing settings
 		int i;
-		unsigned short instance_id = map_getmapdata(sd->bl.m)->instance_id;
 
-		if (instance_id && instance_id != mapdata->instance_id) {
+		if(map_getmapdata(sd->bl.m)->instance_id && !mapdata->instance_id) {
+			bool instance_found = false;
 			struct party_data *p = NULL;
 			struct guild *g = NULL;
-			struct clan *cd = NULL;
 
-			if (sd->instance_id)
+			if (sd->instance_id) {
 				instance_delusers(sd->instance_id);
-			else if (sd->status.party_id && (p = party_search(sd->status.party_id)) != NULL && p->instance_id)
+				instance_found = true;
+			}
+			if (!instance_found && sd->status.party_id && (p = party_search(sd->status.party_id)) != NULL && p->instance_id) {
 				instance_delusers(p->instance_id);
-			else if (sd->status.guild_id && (g = guild_search(sd->status.guild_id)) != NULL && g->instance_id)
+				instance_found = true;
+			}
+			if (!instance_found && sd->status.guild_id && (g = guild_search(sd->status.guild_id)) != NULL && g->instance_id)
 				instance_delusers(g->instance_id);
-			else if (sd->status.clan_id && (cd = clan_search(sd->status.clan_id)) != NULL && cd->instance_id)
-				instance_delusers(cd->instance_id);
-			else
-				instance_delusers(instance_id);
 		}
 
 		sd->state.pmap = sd->bl.m;
+		sd->state.only_walk = 0;
 		if (sd->sc.count) { // Cancel some map related stuff.
 			if (sd->sc.data[SC_JAILED])
 				return SETPOS_MAPINDEX; //You may not get out!
@@ -5542,6 +5653,8 @@ enum e_setpos pc_setpos(struct map_session_data* sd, unsigned short mapindex, in
 		party_send_dot_remove(sd); //minimap dot fix [Kevin]
 		guild_send_dot_remove(sd);
 		bg_send_dot_remove(sd);
+		if( battle_config.bg_queue_onlytowns && sd->qd && map_getmapflag(sd->bl.m, MF_TOWN) && !map_getmapflag(m, MF_TOWN) )
+			queue_leaveall(sd);
 		if (sd->regen.state.gc)
 			sd->regen.state.gc = 0;
 		// make sure vending is allowed here
@@ -8107,6 +8220,7 @@ int pc_readparam(struct map_session_data* sd,int type)
 		case SP_KILLEDRID:       val = sd->killedrid; break;
 		case SP_KILLEDGID:       val = sd->killedgid; break;
 		case SP_SITTING:         val = pc_issit(sd)?1:0; break;
+		case SP_ITEMUSEDID:      val = sd->itemusedid; break;
 		case SP_CHARMOVE:		 val = sd->status.character_moves; break;
 		case SP_CHARRENAME:		 val = sd->status.rename; break;
 		case SP_CHARFONT:		 val = sd->status.font; break;
@@ -8375,6 +8489,9 @@ bool pc_setparam(struct map_session_data *sd,int type,int val)
 		return true;
 	case SP_KILLEDGID:
 		sd->killedgid = val;
+		return true;
+	case SP_ITEMUSEDID:
+		sd->itemusedid = val;
 		return true;
 	case SP_CHARMOVE:
 		sd->status.character_moves = val;
@@ -9135,6 +9252,9 @@ bool pc_candrop(struct map_session_data *sd, struct item *item)
 bool pc_can_attack( struct map_session_data *sd, int target_id ) {
 	nullpo_retr(false, sd);
 
+	if( sd->state.only_walk )
+		return false;
+	
 	if( pc_is90overweight(sd) || pc_isridingwug(sd) )
 		return false;
 

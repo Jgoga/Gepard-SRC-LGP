@@ -854,7 +854,9 @@ enum sc_type : int16 {
 	SC_GLASTHEIM_HPSP,
 
 	SC_ANCILLA,
-
+	
+	SC_EMERGENCYCALL,
+	
 #ifdef RENEWAL
 	SC_EXTREMITYFIST2, //! NOTE: This SC should be right before SC_MAX, so it doesn't disturb if RENEWAL is disabled
 #endif
@@ -1803,6 +1805,9 @@ enum si_type : short {
 	SI_EP16_2_BUFF_SC = 964,
 	SI_EP16_2_BUFF_AC = 965,
 	SI_GS_MAGICAL_BULLET = 966,
+
+	SI_EMERGENCYCALL = 970,
+	SI_PNEUMA = 971,
 
 	SI_FALLEN_ANGEL = 976,
 

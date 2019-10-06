@@ -406,6 +406,8 @@
 	export_constant(MF_LEAVES);
 	// Intentionally disabled mf_rain because Ind removed it source side
 	//export_constant(MF_RAIN);
+	export_constant(MF_ALLOW_BG_ITEMS);
+	export_constant(MF_ALLOW_WOE_ITEMS);
 	export_constant(MF_NOGO);
 	export_constant(MF_CLOUDS);
 	export_constant(MF_CLOUDS2);
@@ -512,6 +514,7 @@
 	export_parameter("killerrid",SP_KILLERRID);
 	export_parameter("killedrid",SP_KILLEDRID);
 	export_parameter("killedgid",SP_KILLEDGID);
+	export_parameter("itemusedid",SP_ITEMUSEDID);
 	export_parameter("Sitting",SP_SITTING);
 	export_parameter("CharMoves",SP_CHARMOVE);
 	export_parameter("CharRename",SP_CHARRENAME);
@@ -4509,6 +4512,16 @@
 
 	/* item groups */
 	export_constant(IG_BLUEBOX);
+	export_constant(IG_ROYALBOX);
+	export_constant(IG_GP_14);
+	export_constant(IG_GP_18);
+	export_constant(IG_PP);
+	export_constant(IG_Pack_Swordman);
+	export_constant(IG_Pack_Archer);
+	export_constant(IG_Pack_Mage);
+	export_constant(IG_Pack_Acolyte);
+	export_constant(IG_Pack_Thief);
+	export_constant(IG_Pack_Merchant);
 	export_constant(IG_VIOLETBOX);
 	export_constant(IG_CARDALBUM);
 	export_constant(IG_GIFTBOX);
